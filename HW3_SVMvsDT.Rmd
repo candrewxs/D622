@@ -23,10 +23,11 @@ Support Vector Machine (SVM), Decision Trees, and Random Forests are popular mac
 
 
 ### Aim of Analysis
-The primary objective of this analysis is to evaluate and compare different customer behavior prediction models based on the available dataset. To achieve this, these are the methods: 
-•	Conduct an analysis of the dataset and the features within the dataset to predict whether gender affects product sales.
-•	Conduct descriptive data analysis on the Shop's Customer Data.
-•	Select the optimal model that provides the highest level of accuracy.  
+The primary objective of this analysis is to evaluate and compare different customer behavior prediction models based on the available dataset. To achieve this, these are the methods:
+
+•	Conduct an analysis of the dataset and the features within the dataset to predict whether gender affects product sales.\
+•	Conduct descriptive data analysis on the Shop's Customer Data.\
+•	Select the optimal model that provides the highest level of accuracy.\  
 
 
 ### Approach
@@ -34,10 +35,11 @@ The primary objective of this analysis is to evaluate and compare different cust
 **Overview of the Proposed Models**
 
 The Kaggle dataset, Shop Customer Data, was modeled involving these outlined steps:
-•	First, the data was downloaded from the Kaggle website, prepared, and preprocessed.
-•	Exploratory data analysis was performed to determine hidden relationships and patterns. These preprocessing techniques involved the imputation of null, label encoding, data transformation, and feature selection.
-•	After explanatory analysis, the splitting of data into train and test sets were done on the ratio of 3:1. Assigning 75% of the dataset for training purposes and 25% for testing purposes.
-•	The attempted ML models, including support vector machine, decision trees, and random forests, were formed and loaded with the testing dataset to categorize them into female and male. Supervised classifiers have been used for the modeling.  
+
+•	First, the data was downloaded from the Kaggle website, prepared, and preprocessed.\
+•	Exploratory data analysis was performed to determine hidden relationships and patterns. These preprocessing techniques involved the imputation of null, label encoding, data transformation, and feature selection.\
+•	After explanatory analysis, the splitting of data into train and test sets were done on the ratio of 3:1. Assigning 75% of the dataset for training purposes and 25% for testing purposes.\
+•	The attempted ML models, including support vector machine, decision trees, and random forests, were formed and loaded with the testing dataset to categorize them into female and male. Supervised classifiers have been used for the modeling.\  
 
 
 **Methods and Methodologies**
