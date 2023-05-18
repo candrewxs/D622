@@ -1,0 +1,539 @@
+---
+title: "Final_HW4"
+author: "Coffy Andrews-Guo"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment = NA, warning = FALSE, message = FALSE)
+```
+
+# Exploratory Analysis using Ensemble Machine Learning Algorithms
+
+```{r libraries}
+suppressPackageStartupMessages({
+  #data import, tidying, manipulation, visualization, and programming
+  library("tidyverse") 
+  library("flextable") #pretty table
+  library("mlbench") #frequency table
+  library("caTools") #data partitioning
+  library("DMwR") #balance dataset
+  #R for Statistical Learning
+  library("rpart")
+  library("rpart.plot")
+  library("randomForest")
+  library("gbm")
+  library("caret") #data partitioning
+  library("MASS")
+  library("ISLR")
+  library("xgboost")
+  library("caretEnsemble")
+  library("cowplot") #arrange multiple plots
+  library("ROSE")
+})
+```
+
+### Introduction
+
+The [Tuition Assistance Program (TAP) Recipients & Dollars by Income, Age Group and Program Information: Beginning 2000](https://data.ny.gov/Education/Tuition-Assistance-Program-TAP-Recipients-Dollars-/2t78-bs45) [dataset](https://data.ny.gov/resource/2t78-bs45.csv) contains information on the financial aid provided by New York State to eligible students for attending college and it is New York’s largest student financial aid grant program. Since 2020, the Tuition Assistance Program (TAP) has been providing financial aid grants to eligible residents of New York who are pursuing their post-secondary education within the state. TAP grants are awarded based on the New York State taxable income of the applicant and their family. This dataset contains information on the TAP grant recipients from July 1 through June 30, including the dollar amount of the grant, grouped by various factors such as income and age group. It is New York's largest student financial aid grant program.
+
+
+```{r load}
+# load the dataset and renamed it tap
+tap <- read.csv("https://data.ny.gov/resource/2t78-bs45.csv")
+```
+
+**Prediction using Binary Classification**\
+What is the likelihood of a student to receive an above average tuition assistance based on the dataset variables (features), such as age, financial status, or program of study?\
+
+
+### Exploring and Preparing the Data
+
+```{r object, results='hide'}
+format(object.size(tap), units = "auto")
+```
+
+The TAP data set is a comma-separated values (CSV) file containing `r format(object.size(tap), units = "auto")` of information. The data set information includes `r nrow(tap)` observations and `r ncol(tap)` features. These features are categorized based on their categorical (discrete) form and integer/real number (continuous) form.\
+
+
+The dataset includes several features for the analysis, listed here:\
+- Academic Year: Academic Year is from July 1 through June 30 \
+- Level: U = Undergraduate  G = Graduate \ 
+- TAP Level of Study: Student’s Level of Study \
+  - 2 yr Undergrad = Undergraduate 2 Year Program of Study \ 
+  - 4 yr Undergrad = Undergraduate 4 Year Program of Study \ 
+  - 5 yr Undergrad = Approved Undergraduate 5 Year Program of Study \ 
+  - STAP = Supplemental Tuition Assistance Program (authorized additional aid for remedial courses)\ 
+  - Grad = Graduate Level Program of Study\
+- Sector Type: Type of Institution is either Public or Private\
+- TAP Sector Group: Sector Group of Institution:\ 
+    1-CUNY SR = CUNY Senior Colleges\ 
+    2-CUNY CC = CUNY Community Colleges\ 
+    3-SUNY SO = SUNY State Operated\ 
+    4-SUNY CC = SUNY Community Colleges\ 
+    5-INDEPENDENT = Independent Colleges\ 
+    6-BUS. DEGREE = Business Degree Granting Institutions\ 
+    7-BUS. NON-DEG = Non-Degree Business Schools\ 
+    8-OTHER = All Other Institutions\
+    9-CHAPTER XXII = Chapter XXII TAP Schools\
+- Recipient Age Group: Age of student as of July 1 start of academic year\
+- Tap Financial Status: Financial Status is either Financial_Dependent or Financial_Independent						Character\
+- Tap Award Schedule: There are 3 awards schedules:\
+    Dependent Schedule,\ 
+    Independent Schedule,\ 
+    or Married No Dependents Schedule\
+- Tap Degree or NonDegree:\
+    Degree = Program of study is classified as degree granting\ 
+    Non Degree = Program of study is classified as non degree\
+- Tap Schedule Letter: Refer to Tuition Assistance Program award schedule documentation. The link is provided in the Additional Resources section after selecting the About tab.\
+- Income by $1,000 Range: When performing data analysis, one of three income ranges can be selected. The $1,000 income range is the lowest level of granularity that is available in this dataset. Recipient New York State Net Taxable Income by Category\
+- Income by $5,000 Range: When performing data analysis, one of three income ranges can be selected. The $5,000 income range is the middle level of granularity that is available in this dataset. Recipient New York State Net Taxable Income by Category\
+- Income by $10,000 Range: When performing data analysis, one of three income ranges can be selected. The $10,000 income range is the highest level of granularity that is available in this dataset. Recipient New York State Net Taxable Income by Category\
+- Tap Recipient Headcount: Number of recipients as measured by students receiving at least one term award during the academic year.\
+- Tap Recipient FTEs: Number of recipients as measured by academic year Full-Time Equivalents: Full Time Equivalent is a unit that indicates the enrollment of a student in credit-bearing courses in a way that makes it comparable across contexts. An FTE of 1.0 means that the person is equivalent to 1 full-time student, while an FTE of 0.5 signals that a student is enrolled half-time.\
+- Tap Recipient Dollars: Total TAP award dollars provided on behalf of TAP recipients attending an Institution.\
+
+
+```{r glimpse, results='hide'}
+glimpse(tap)
+```
+
+
+This analysis will investigate the probability of a student obtaining tuition assistance that exceeds the average amount. The dataset that will be used for the analysis is imbalanced, containing only a small number of positive cases (high award) compared to negative ones (average/low award). Specifically, there are a total of **330** (33%) high award cases and **670** (67%) average/low award cases. I will utilize an ensemble of machine-learning methods to address this issue.\
+
+
+
+### Preparation
+
+The dataset was prepared and manipulated to resolve issues such as:\
+-	Changing 
+    character variables to factor variables\
+    integer variables to numeric variables\
+    numeric variables that are known to be factor variables\
+    variables name to a shorter description\
+- Outliers – the entire data was kept, and log transformation was applied to modify the data structure to meet the requirements of the machine learning approach.\
+- Feature extraction – removed features that have no impact on the machine learning approach.\
+
+
+**DESCRIPTIVE STATISTICS**
+
+```{r mutate}
+# convert all character columns to factor
+# convert academic_year variable to factor (qualitative measure)
+tap <- tap %>%
+  mutate_if(is.character, as.factor) %>%
+  mutate_if(is.integer, as.numeric) %>%
+  mutate(academic_year = as.factor(academic_year))
+```
+
+
+```{r summary, results='hide'}
+# view statistical summary of the updated data frame
+summary(tap)
+```
+
+
+The summary statistics indicates two different formats: one format for categorical features and the other for continuous features. The summary statistics for the categorical features, such as *sector_type*, show the feature values along with the frequency for each value. The second format applies to continuous features, showing the mean, median, minimum, maximum, and the first and third quartile values.
+
+```{r na, results='hide'}
+#find total NA values in data frame
+sum(is.na(tap))
+```
+
+The *summary()* function list the number of missing values (NAs) for the features and `NAs` are non-existent in the data set.\ 
+
+
+### Visualizing the Data
+
+**Relationship between two categorical variables**
+
+The contingency table using the `table()` function shows the number of cases in each *sector_type* subgroup compared to *level_of_study*:
+```{r contingency}
+# Descriptive Analysis - Contingency Table
+knitr::kable(table(tap$tap_level_of_study, tap$sector_type))
+```
+
+
+*Visualizing the contingency table:*
+```{r}
+# Mosaic Plot
+# allow to visualize a contingency table of two qualitative variables
+mosaicplot(~ sector_type + tap_level_of_study, data = tap, color = 2:4, las = 1, 
+           ylab = "Level of Study",
+           xlab = "Sector Type")           
+```
+
+
+The contingency table shows the *Public* sector type have more TAP recipients than the *Private* sector type among the various *Level of Study*.\
+
+
+*Relationship between numeric variables*
+
+```{r numeric, results='hide'}
+# remove categorical variable
+
+tap.num <- tap %>% dplyr::select(tap_recipient_headcount, tap_recipient_ftes, tap_recipient_dollars)
+
+# display 5 first obs. of new dataset
+head(tap.num, 5)
+
+```
+
+The correlation between the numeric variables show several pairs of variable are positively linked in response to a each other. Also, the relationship between the pairs of variables shows *outlier* in the data and probable bias.  
+
+```{r pairs}
+#multiple scatterplots
+sector <- tap[, 4]
+l <- length(unique(sector))
+#pairs(tap.num, pch = 19, col = 10, main = "Pairwise Correlation Plot")
+pairs(tap.num, pch = 22, bg = hcl.colors(l, "Temps")[sector],
+      col = hcl.colors(l, "Temps")[sector])
+```
+
+
+In the boxplot, we see the distribution of values between *tap recipients* and *sector group*. The outliers are represented by red circles that extend beyond either whisker. 
+
+```{r boxplot}
+#boxplot
+tap %>%
+  ggplot() + 
+  geom_boxplot(mapping = aes(x = tap_sector_group, y = log10(tap_recipient_headcount)), fill = "#56B4E9",
+               outlier.colour = "tomato2") + 
+  labs(title = "Boxplot of Tap Recipicents by Sector Group") +
+  coord_flip()
+```
+
+
+```{r skew, eval=FALSE}
+#Distribution - show the statistical distribution of the values of a feature. It shows the spread and skewness of data for a particular feature.
+tap %>%
+  ggplot() + 
+  geom_histogram(mapping = aes(x = log10(tap_recipient_headcount)), bins = 30, fill = "yellow", color = "black") + 
+  labs(title = "Histogram of Tap Recipicents")
+```
+
+
+```{r composition, eval=FALSE}
+#Composition - shows the component makeup of the data (stacked and pie charts)
+tap %>%
+  ggplot() + 
+  geom_bar(mapping = aes(x = income_by_10_000_range, fill = tap_level_of_study), color = "black") + 
+  labs(title = "Stacked bar chart on level of study by Income Range", x = "Num. of Tap Recipients", y = "Tap Fees") +
+  coord_flip()
+```
+
+
+
+### BUILDING THE CLASSIFICATION ENSEMBLE MODELS
+
+An ensemble machine learning algorithm is a technique that combines multiple individual models to make predictions or decisions. Instead of relying on a single model, an ensemble leverages the collective knowledge of multiple models to improve overall performance and accuracy. The idea behind ensemble models is that by combining the predictions of diverse models, the weaknesses of individual models can be mitigated, and the strengths can be amplified. 
+
+This analysis will apply the ensemble machine learning  algorithms: *(1) Random Forest, (2) Bagged Trees, (3)eXtreme Gradient Boosting “XGBoost” (4) C5.0, (5) Stacking (includes: CART “rpart”, k-Nearest Neighbors “knn”, svmRadial, Generalized Linear Model “glm”, and Naïve Bayes “naïve_bayes”).*
+
+
+```{r new-object}
+#create new object
+#remove variables that has no value
+tap2 <- tap %>% dplyr::select(-c(academic_year, level, tap_degree_or_nondegree))
+
+```
+
+
+```{r change-name}
+names(tap2)[8] <- "income_1k"
+names(tap2)[9] <- "income_5k"
+names(tap2)[10] <- "income_10k"
+
+```
+
+
+```{r transform}
+#For skewed distributions and data with values that range over several orders of magnitude, the log transformation is usually more suitable
+#Applying log transformation on the continuous features/numeric values
+
+tap2 <- tap2 %>%
+  #select(tap_recipient_headcount, tap_recipient_ftes, tap_recipient_dollars) %>%
+  mutate(tap_recipient_headcount = log10(tap_recipient_headcount)) %>%
+  mutate(tap_recipient_ftes = log10(tap_recipient_ftes)) %>%
+  mutate(tap_recipient_dollars = log10(tap_recipient_dollars))
+
+```
+
+
+```{r check-transform, results='hide'}
+tap2 %>%
+  keep(is.numeric) %>%
+  summary()
+```
+
+
+```{r check-distribution, eval=FALSE}
+p2 <- ggplot(tap2, aes(tap_recipient_dollars)) + 
+  geom_histogram(bins = 15, fill = "yellow", color = "black") + 
+  geom_vline(xintercept = mean(tap2$tap_recipient_dollars), col = "red", lwd = 3) +
+  labs(title = "Histogram of Tap Recipicent Dollars") 
+
+p2 + 
+  annotate("text",                        # Add text for mean
+           x = mean(tap2$tap_recipient_dollars) * 1.3,
+           y = mean(tap2$tap_recipient_dollars) * 40,
+           label = paste("Mean =", round(mean(tap2$tap_recipient_dollars), 2)),
+           col = "red",
+           size = 6)
+```
+
+
+
+
+```{r recode-variable}
+#Modify variable, tap_recipient_dollars, from numeric to categorical
+tap2$tap_recipient_dollars <- as.factor(ifelse(tap2$tap_recipient_dollars <= "4", "Low", "High"))
+```
+
+
+```{r check-recode, results='hide'}
+summary(tap2)
+```
+
+
+```{r split-data}
+#split dataset into training and test sets
+set.seed(1234)
+sample_set2 <- createDataPartition(y = tap2$tap_recipient_dollars, p = 0.75, list = FALSE)
+dollars_train <- tap2[sample_set2,]
+dollars_test <- tap2[-sample_set2, ]
+```
+
+
+```{r check-split, results='hide'}
+round(prop.table(table(dplyr::select(dollars_train, tap_recipient_dollars), exclude = NULL)), 4) * 100
+```
+
+
+```{r SMOTE}
+#balance the training data
+set.seed(1234)
+dollars_train <- SMOTE(tap_recipient_dollars ~ ., data.frame(dollars_train),
+                      perc.over = 100, perc.under = 200)
+```
+
+
+```{r check-balance, results='hide'}
+round(prop.table(table(dplyr::select(dollars_train, tap_recipient_dollars), exclude = NULL)), 4) * 100
+```
+
+
+
+#### Random Forest (p. 355)
+
+Random Forest is an ensemble learning approach that combines multiple decision trees. It works by creating bootstrap samples from the training data and constructing decision trees on these samples. Each tree considers a random subset of features at each node. During prediction, the trees' outputs are aggregated through voting or averaging. Random Forest reduces overfitting, improves generalization, and provides feature importance measures. It is known for its accuracy, robustness, and versatility in handling classification and regression tasks.
+
+```{r randomforest, results='hide'}
+#Implementation of random forest using caret
+set.seed(9)
+control = trainControl(method="repeatedcv", number=5, repeats=2, savePredictions=TRUE, classProbs=TRUE)
+rf = train(tap_recipient_dollars~., data = dollars_train, method = 'rf', metric = 'Accuracy', trControl = control)
+rf
+```
+```{r rf-model, results='hide'}
+set.seed(1239)
+rf_mod <- train(tap_recipient_dollars ~., data = dollars_train, metric = "Accuracy", 
+                method = "rf", trControl = trainControl(method = "repeatedcv"),
+                tuneGrid = expand.grid(.mtry = 66))
+rf_mod
+```
+```{r rf-pred, results='hide'}
+rf_pred <- predict(rf_mod, dollars_test)
+(rf_cm <- confusionMatrix(rf_pred, dollars_test$tap_recipient_dollars, positive = "High"))
+```
+
+
+#### Bagging
+
+Bagging, or bootstrap aggregating, is an ensemble learning technique that combines multiple models to make predictions. It works by creating subsets of the training data through bootstrapping and training individual models on these subsets. During prediction, the models' outputs are combined to obtain the final prediction. Bagging reduces variance, improves performance, and helps with overfitting by capturing different aspects of the data. It is a powerful technique that increases accuracy and stability in machine learning algorithms.
+
+```{r bagging, results='hide'}
+set.seed(9)
+bg <- train(tap_recipient_dollars ~., data = dollars_train, method = "treebag", metric = "Accuracy", trControl = control)
+bg
+```
+
+```{r bag-pred, results='hide'}
+#evaluate how well Bagged performs
+bg_pred <- predict(bg, dollars_test)
+(bg_cm <- confusionMatrix(bg_pred, dollars_test$tap_recipient_dollars, positive = "High"))
+```
+
+
+
+
+#### Boosting (XGBoost)
+Extreme Gradient Boosting (XGBoost) is an ensemble learning approach that combines multiple decision trees using gradient boosting. It starts with an initial model and calculates gradients and residuals to build new trees capturing the errors. The model is updated iteratively by combining the predictions from the new trees with a learning rate. XGBoost applies regularization techniques to prevent overfitting and produces a final prediction by combining the predictions from all the trees. It is known for its speed, performance, and ability to handle complex relationships in the data.
+
+```{r xgboost}
+#XGBoost algorithm("xgboost")
+
+set.seed(9)
+xgb_mod<- train(tap_recipient_dollars ~., data = dollars_train, method = "xgbTree",
+            metric = "Accuracy", trControl = control, tuneGrid = expand.grid(
+              nrounds = 100, max_depth = 6, eta = 0.3, gamma = 0.01, 
+              colsample_bytree = 1, min_child_weight = 1, subsample = 1
+            ))
+```
+
+
+```{r xgb, results='hide'}
+xgb_mod
+```
+
+
+```{r xgb-eval, results='hide'}
+#evaluate how well xgboost performs
+xgb_pred <- predict(xgb_mod, dollars_test)
+(xgb_cm <- confusionMatrix(xgb_pred, dollars_test$tap_recipient_dollars, positive = "High"))
+```
+
+
+```{r xgb-varImp, results='hide'}
+varImp(xgb_mod)
+```
+
+
+#### C5.0
+
+C5.0 is an ensemble learning approach that combines decision trees to create a powerful predictive model. It starts by splitting the data based on attribute values to create pure subsets. Decision trees are constructed using information gain, and pruning is applied to reduce overfitting. Multiple decision trees are generated using different subsets of data or attributes, and their predictions are combined through voting. C5.0 improves accuracy, handles complex relationships, and is widely used for its interpretability and feature selection capabilities.\
+```{r C5.0, results='hide'}
+#Implementation of AdaBoost and Boosted classification trees using caret
+set.seed(9)
+C5 = train(tap_recipient_dollars~., data = dollars_train, method = 'C5.0', trControl = control)
+C5
+
+```
+
+```{r C5-pred, results='hide'}
+C5_pred <- predict(C5, newdata = dollars_test)
+(C5_cm <- confusionMatrix(C5_pred, dollars_test$tap_recipient_dollars, positive = "High"))
+```
+
+
+
+
+#### Stacking
+Stacking is an ensemble learning approach that combines the predictions of multiple models using a meta-model. It involves training diverse base models and using their predictions as input features for training a meta-model. The meta-model learns to combine and weigh the predictions of the base models to make the final prediction. Stacking leverages the strengths of different models and captures complex patterns in the data. It can outperform individual models and requires careful model selection, dataset partitioning, and meta-model tuning.\
+
+*Using only `caret` models: CART(rpart), k-Nearest Neighbors(knn), svmRadial, Generalized Linear Model(glm), Naive Bayes(naive_bayes).*
+
+```{r stacking, results='hide'}
+#caretEnsemble() library - ensemble methods
+#Let's build models rpart, knn, svm(radial), glm & naive_bayes
+set.seed(9)
+algorithms = c('rpart', 'knn', 'svmRadial', 'glm', 'naive_bayes')
+set.seed(7)
+models = caretList(tap_recipient_dollars~., data = dollars_train, trControl=control, methodList=algorithms)
+summary(models)
+
+```
+
+After training our base models, the subsequent step involves training the meta-model, which acts as the combination function. However, before proceeding, it is essential to analyze the performance of our base models against the training data. To achieve this, we utilize the "resamples()" function to gather results from each model and then employ the "summary()" function to obtain summary statistics of these results.\
+
+```{r resamples}
+ans = resamples(models) #resamples helps to tabularize the results
+summary(ans)
+
+```
+Visualize the results:
+```{r staking-plot}
+dotplot(ans)
+```
+
+
+The analysis of the results indicates that the four models exhibit similar average performance, with the svmRadial model,`svm(Radial)`, achieving the highest performance among the five.
+
+```{r model-corr, results='hide'}
+#Check correlations between models to ensure the results are uncorrelated and can be ensemble
+modelCor(ans)
+
+```
+
+We are prepared to construct the ultimate component of our stacking ensemble, known as the meta-model. To accomplish this, we employ the random forest ensemble method as our chosen machine learning algorithm. The *caretEnsemble* package offers us a convenient function called *caretStack()*, enabling us to combine multiple predictive models through the stacking technique.
+
+
+```{r glm-stack, results='hide'}
+# library ("ROSE")
+# stack using Logistics Regression
+set.seed(9)
+stack.glm = caretStack(models, method="glm", metric="Accuracy", trControl=control) #logistic
+print(stack.glm)
+```
+
+
+```{r stack-glm, results='hide'}
+#evaluate how well xgboost performs
+stackglm_pred <- predict(stack.glm, dollars_test)
+(stglm_cm <- confusionMatrix(stackglm_pred, dollars_test$tap_recipient_dollars, positive = "High"))
+```
+
+
+
+### Results and Discussion
+
+This section presents the results of experiments conducted to study the performance of various decision tree ensembles.As the data is imbalanced, classification accuracy is not an appropriate performance measure to compare different classifiers. F-measure, precision, recall, accuracy, and kappa are employed to compare the performances of different classification ensemble models. 
+
+
+```{r byClass, results='hide'}
+names(bg_cm$byClass)
+```
+
+```{r overall, results='hide'}
+names(bg_cm$overall)
+```
+
+
+
+```{r performance}
+rf_acc <- c(rf_cm$byClass[5:7], rf_cm$overall[1:2]) #random forest
+bg_acc <- c(bg_cm$byClass[5:7], bg_cm$overall[1:2]) #bagging
+xgb_acc <- c(xgb_cm$byClass[5:7], xgb_cm$overall[1:2]) #XGBoost
+C5_acc <- c(C5_cm$byClass[5:7], C5_cm$overall[1:2]) #C5.0
+stglm_acc <- c(stglm_cm$byClass[5:7], stglm_cm$overall[1:2]) #glm stacked
+
+tab_model <- rbind(rf_acc, bg_acc, xgb_acc, C5_acc, stglm_acc)
+
+tab.model <- data.frame(tab_model)
+rownames(tab.model) <- c("Random Forest", "Bagging", "XGBoost", "C5.0", "GLM-Stack")
+tab.model
+#flextable(tab.model) %>% align(align = "center", part = "all") %>% autofit()
+```
+
+
+**Model Evaluation:** C5.0 performed the best among the other ensemble models. The C5.0 performance using cross-validation helped to assess the accuracy and generalization ability of the model. Thefore, the ensemble approach in *C5.0* improved the model's accuracy, robustness, and ability to handle complex relationships in the data. It reduced the risk of overfitting and provided a more reliable prediction by combining the outputs of multiple ensemble learning approach as shown in the above table.
+
+C5.0 is widely used for its effectiveness, interpretability, and feature selection capabilities. It has been applied to various domains and is considered one of the prominent algorithms in the field of machine learning.
+\
+
+**In Conclusion:**
+
+A student inquiry on the likelihood receiving an above average tuition assistance based variables (features), such as age, financial status, or program of study will have a **97% precision** with the C5.0 decision tree ensemble algorithm. Although some institutions may utilize machine learning algorithms such as C5.0 or other decision tree-based approaches, their calculations typically involve complex considerations beyond just algorithmic models. 
+
+
+## REFERENCES
+
+- [An Introduction to Statistical Learning with Applications in R](https://hastie.su.domains/ISLR2/ISLRv2_website.pdf)
+
+- Nwanganga, F., & Chapple, M. (2020). Practical machine learning in R. John Wiley & Sons. 
+
+- [Ensemble Learning in R](https://github.com/kmutya/Ensemble-Learning-in-R)
+
+- [Chapter 27 Ensemble Methods](https://daviddalpiaz.github.io/r4sl/ensemble-methods.html)
+
+- [Foley, M. (2020, July 26). 8.6 Summary | My Data Science Notes.](https://bookdown.org/mpfoley1973/data-sci/summary.html)
+
+
+
+## Appendix: All code for this report
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+
+```
